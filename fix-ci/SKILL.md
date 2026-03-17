@@ -1,3 +1,14 @@
+---
+name: fix-ci
+description: Watch GitHub Actions for the current PR, fetch failure logs, fix the code, and repeat until all checks pass
+allowed-tools:
+  - Bash
+  - Read
+  - Edit
+  - Glob
+  - Grep
+---
+
 # Fix CI
 
 Watch GitHub Actions for the current PR, pull back failure logs, fix the code, push, and repeat until all checks pass.
