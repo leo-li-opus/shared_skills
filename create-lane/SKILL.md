@@ -61,7 +61,7 @@ gh workflow run release-lane.yml \
   -f owner_name="<git-user-name>"
 ```
 
-## 6. Confirm
+## 6. Confirm and print summary
 
 Print a summary of what was triggered:
 - Lane name
@@ -69,4 +69,22 @@ Print a summary of what was triggered:
 - Services
 - Environment
 - TTL (as a human-readable date)
-- Link: Tell the user to check GitHub Actions for progress
+
+## 7. Monitor the workflow
+
+After triggering, wait 5 seconds then find the run ID:
+
+```bash
+gh run list --workflow=release-lane.yml --limit=1 --json databaseId,status,conclusion --jq '.[0]'
+```
+
+Poll the workflow status every 30 seconds using `gh run view <run-id>`. While polling:
+
+- Print a brief status update each time (e.g., "Still running... (2m elapsed)")
+- If a job fails, immediately fetch the logs for the failed job:
+  ```bash
+  gh run view <run-id> --log-failed
+  ```
+- When the workflow completes:
+  - **Success**: Print a success message with the lane URL/details
+  - **Failure**: Print the failed job name, the relevant error from the logs, and suggest next steps (e.g., retry, check config, etc.)
