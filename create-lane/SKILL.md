@@ -78,13 +78,26 @@ After triggering, wait 5 seconds then find the run ID:
 gh run list --workflow=release-lane.yml --limit=1 --json databaseId,status,conclusion --jq '.[0]'
 ```
 
-Poll the workflow status every 30 seconds using `gh run view <run-id>`. While polling:
+Poll the workflow status every 30 seconds using `gh run view <run-id>`. The single workflow run contains multiple parallel jobs (one per service in the matrix). While polling:
 
-- Print a brief status update each time (e.g., "Still running... (2m elapsed)")
-- If a job fails, immediately fetch the logs for the failed job:
+- Print a brief status update each time showing per-job status, e.g.:
+  ```
+  Still running... (2m elapsed)
+    Release api        ✓ completed
+    Release hitl-worker  ⏳ in_progress
+    Release render       ⏳ queued
+  ```
+  Use `gh run view <run-id> --json jobs --jq '.jobs[] | {name, status, conclusion}'` to get per-job status.
+
+- If any job fails, immediately fetch its logs:
   ```bash
   gh run view <run-id> --log-failed
   ```
-- When the workflow completes:
-  - **Success**: Print a success message with the lane URL/details
-  - **Failure**: Print the failed job name, the relevant error from the logs, and suggest next steps (e.g., retry, check config, etc.)
+  Print the failed job name and the relevant error excerpt.
+
+- Continue monitoring remaining jobs even if one fails (the workflow uses `fail-fast: false`).
+
+- When all jobs complete, print a final summary:
+  - **Per-service result**: which services succeeded and which failed
+  - For failures: show the error and suggest next steps (retry, check config, etc.)
+  - For success: confirm the lane is ready
