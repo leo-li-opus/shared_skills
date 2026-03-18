@@ -99,5 +99,60 @@ Poll the workflow status every 30 seconds using `gh run view <run-id>`. The sing
 
 - When all jobs complete, print a final summary:
   - **Per-service result**: which services succeeded and which failed
-  - For failures: show the error and suggest next steps (retry, check config, etc.)
-  - For success: confirm the lane is ready
+  - For failures: show the error from GH Actions logs, then run kubectl diagnostics (see step 8)
+  - For success: confirm the lane is ready and print access links (see step 9)
+
+## 8. Diagnose failures with kubectl
+
+If any service deployment failed, use kubectl to inspect the cluster state for that service. The lane deployments go to:
+- **Staging cluster**: `opus-ai-staging-opusagent-flagship`
+- **Production cluster**: `opus-agent-prod-flagship`
+
+Lane pods use the naming pattern `<service-name>-<lane-name>` (e.g., `api-allen-zhou`, `engine-worker-allen-zhou`). The `fullnameOverride` in each service's `values.yaml` defines the base service name.
+
+Run these kubectl commands for each failed service:
+
+```bash
+# 1. Find the lane pods
+kubectl get pods -l "app.kubernetes.io/instance=<service-name>-<lane-name>" --context <cluster> -A
+
+# 2. If no pods found, check the deployment/release
+kubectl get deployments -l "app.kubernetes.io/instance=<service-name>-<lane-name>" --context <cluster> -A
+
+# 3. If pods exist but are failing, check pod status and events
+kubectl describe pod -l "app.kubernetes.io/instance=<service-name>-<lane-name>" --context <cluster> -A | tail -50
+
+# 4. Check container logs for crash details
+kubectl logs -l "app.kubernetes.io/instance=<service-name>-<lane-name>" --context <cluster> -A --tail=100
+```
+
+Summarize the findings:
+- **CrashLoopBackOff**: Show the container logs with the crash reason
+- **ImagePullBackOff**: The image may not have been built — suggest checking the build step
+- **Pending**: Check events for scheduling issues (resource limits, node availability)
+- **OOMKilled**: Pod ran out of memory — suggest increasing memory limits
+- If kubectl is not configured or access is denied, tell the user and suggest they check manually
+
+## 9. Print access links
+
+After successful deployment, print the appropriate links based on which services were deployed:
+
+### If agent-web was deployed (web change)
+The lane web app is deployed to Cloudflare Pages. Get the deployment URL from the workflow logs — it follows the pattern:
+- Staging: `https://<commit-hash>.opus-agent-web-staging.pages.dev`
+- Production: `https://<commit-hash>.opus-agent-web-prod.pages.dev`
+
+This lane web deployment already routes API requests to the lane backend automatically via the `X-OPUS-LANE-NAME` header.
+
+Print the Cloudflare Pages URL as the primary access link.
+
+### If agent-web was NOT deployed (backend-only change)
+The user should use the standard web app with a query parameter to route to their lane backend:
+- Staging: `https://opus-agent-web-staging.pages.dev/?debugLaneName=<lane-name>`
+- Production: `https://opus-agent-web-prod.pages.dev/?debugLaneName=<lane-name>`
+
+The `debugLaneName` query param sets the `X-OPUS-LANE-NAME` header on all API requests, routing them to the lane backend workers.
+
+### Always print
+- The lane name for manual use in the Debug Panel (Projects → Debug Panel → Origin Changer → enter lane name)
+- The GitHub Actions run URL for reference
